@@ -1,3 +1,4 @@
+// drizzle/schema.ts
 import {
   sqliteTable,
   text,
@@ -9,83 +10,142 @@ import {
   relations,
 } from 'drizzle-orm';
 
+// --- USERS TABLE ---
+// Stores core user information, including their role and a reference to their subscription plan.
 export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
-  name: text('name'),
   email: text('email').notNull().unique(),
+  name: text('name'),
   password: text('password').notNull(),
-  personal_access_token: text('personal_access_token').notNull().unique(),
-  plan: text('plan').default('basic').notNull(),
-  isActive: integer('is_active', { mode: 'boolean' }).default(sql`1`),
-  accountValidTill: integer('account_valid_till', { mode: 'timestamp' }).notNull(),
-  createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`strftime('%s', 'now')`),
+  // A foreign key to the plans table for robust plan management.
+  planId: text('plan_id').references(() => plans.id, { onDelete: 'set null' }),
+  role: text('role').default('user').notNull(), // 'admin' / 'user'
+  personalAccessToken: text('personal_access_token').notNull().unique(),
+  // The timestamp when the user's account access expires. Used for revoking access.
+  accountExpiresAt: integer('account_expires_at', { mode: 'timestamp' }).notNull(),
+  // Status flag for easy access revocation.
+  isActive: integer('is_active', { mode: 'boolean' }).default(true),
+  createdAt: integer('created_at', { mode: 'timestamp' }).defaultNow(),
 }, (table) => ({
-  planConstraint: sql`CHECK(${table.plan} IN ('basic', 'pro', 'plus'))`,
+  // Ensure the 'role' column can only be 'admin' or 'user' for data integrity.
+  roleConstraint: sql`CHECK(${table.role} IN ('admin', 'user'))`,
 }));
 
+// --- PLANS TABLE ---
+// A single source of truth for all subscription plans. This is a key improvement for scalability.
+export const plans = sqliteTable('plans', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull().unique(), // 'basic', 'pro', 'plus'
+  priceInINR: integer('price_in_inr').notNull(),
+  // The maximum number of concurrent WhatsApp sessions allowed for this plan.
+  maxSessions: integer('max_sessions').notNull(),
+  description: text('description'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).defaultNow(),
+});
+
+// --- SESSIONS TABLE ---
+// Stores individual WhatsApp sessions for each user.
 export const sessions = sqliteTable('sessions', {
   id: text('id').primaryKey(),
-  userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
-  phoneNumber: text('phone_number'),
-  waApiKey: text('wa_api_key'),
-  status: text('status').default('active'),
-  createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`strftime('%s', 'now')`),
+  // A foreign key to the users table. 'onDelete: cascade' ensures sessions are removed if a user is deleted.
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  phoneNumber: text('phone_number').notNull(),
+  status: text('status').default('active').notNull(), // 'active' / 'disconnected' / 'expired'
+  sessionName: text('session_name'), // A user-friendly name for the session
+  createdAt: integer('created_at', { mode: 'timestamp' }).defaultNow(),
 }, (table) => ({
-  statusConstraint: sql`CHECK(${table.status} IN ('active', 'inactive', 'expired'))`,
+  // Ensure the 'status' column is a valid value.
+  statusConstraint: sql`CHECK(${table.status} IN ('active', 'disconnected', 'expired'))`,
 }));
 
-// Campaigns, Media, and Reports tables are fine as-is.
-
-export const campaigns = sqliteTable('campaigns', {
-  id: text('id').primaryKey(),
-  userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
-  sessionId: text('session_id').references(() => sessions.id, { onDelete: 'cascade' }),
-  name: text('name'),
-  message: text('message'),
-  mediaUrls: text('media_urls'),
-  createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`strftime('%s', 'now')`),
-});
-
-export const media = sqliteTable('media', {
-  id: text('id').primaryKey(),
-  userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
-  fileName: text('file_name'),
-  fileType: text('file_type'),
-  r2Url: text('r2_url'),
-  createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`strftime('%s', 'now')`),
-});
-
-export const reports = sqliteTable('reports', {
-  id: text('id').primaryKey(),
-  userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
-  campaignId: text('campaign_id').references(() => campaigns.id, { onDelete: 'cascade' }),
-  successCount: integer('success_count').default(0),
-  failureCount: integer('failure_count').default(0),
-  details: text('details'),
-  generatedAt: integer('generated_at', { mode: 'timestamp' }).default(sql`strftime('%s', 'now')`),
-});
-
+// --- PAYMENTS TABLE ---
+// Tracks all payment history for users.
 export const payments = sqliteTable('payments', {
   id: text('id').primaryKey(),
-  userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
-  amount: integer('amount').notNull(),
-  plan: text('plan').notNull(),
-  monthsPaid: integer('months_paid').default(1),
-  paymentDate: integer('payment_date', { mode: 'timestamp' }).default(sql`strftime('%s', 'now')`),
-  validTill: integer('valid_till', { mode: 'timestamp' }).notNull(),
-  paymentMethod: text('payment_method'),
-  transactionId: text('transaction_id'),
+  // Foreign key to users. 'onDelete: cascade' removes payment history if a user is deleted.
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  // Foreign key to plans. This links the payment to a specific plan.
+  planId: text('plan_id').notNull().references(() => plans.id),
+  amountInINR: integer('amount_in_inr').notNull(),
+  monthsPaid: integer('months_paid').notNull(),
+  transactionId: text('transaction_id').notNull().unique(),
+  paidAt: integer('paid_at', { mode: 'timestamp' }).defaultNow(),
+  expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+});
+
+// --- SERVERS TABLE ---
+// Stores details for server instances created on platforms like 'wasender'.
+export const servers = sqliteTable('servers', {
+  id: text('id').primaryKey(),
+  // Foreign key to users. 'onDelete: cascade' removes server info if a user is deleted.
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  platformName: text('platform_name').notNull(), // 'wasender', 'another_platform'
+  serverUrl: text('server_url').notNull(),
+  apiKey: text('api_key').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).defaultNow(),
+});
+
+// --- CAMPAIGNS TABLE ---
+// Stores the details of each bulk messaging campaign.
+export const campaigns = sqliteTable('campaigns', {
+  id: text('id').primaryKey(),
+  // Foreign key to users.
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  status: text('status').default('draft').notNull(), // 'draft', 'in_progress', 'completed', 'failed'
+  messageContent: text('message_content'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).defaultNow(),
 }, (table) => ({
-  planConstraint: sql`CHECK(${table.plan} IN ('basic', 'pro', 'plus'))`,
+  statusConstraint: sql`CHECK(${table.status} IN ('draft', 'in_progress', 'completed', 'failed'))`,
 }));
 
-// Relations remain unchanged
-export const usersRelations = relations(users, ({ many }) => ({
+// --- MESSAGE LOGS TABLE ---
+// Stores logs for individual messages sent as part of a campaign.
+export const messageLogs = sqliteTable('message_logs', {
+  id: text('id').primaryKey(),
+  // Foreign key to campaigns.
+  campaignId: text('campaign_id').notNull().references(() => campaigns.id, { onDelete: 'cascade' }),
+  // Foreign key to the specific session used.
+  sessionId: text('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
+  messageContent: text('message_content'),
+  status: text('status').default('sent').notNull(), // 'sent' / 'failed'
+  timestamp: integer('timestamp', { mode: 'timestamp' }).defaultNow(),
+}, (table) => ({
+  statusConstraint: sql`CHECK(${table.status} IN ('sent', 'failed'))`,
+}));
+
+
+// --- MEDIA UPLOADS TABLE ---
+// Stores metadata for files uploaded to a service like Cloudflare R2.
+export const mediaUploads = sqliteTable('media_uploads', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  fileName: text('file_name').notNull(),
+  fileType: text('file_type').notNull(), // 'image' / 'video' / 'document'
+  r2Url: text('r2_url').notNull(),
+  uploadedAt: integer('uploaded_at', { mode: 'timestamp' }).defaultNow(),
+});
+
+
+// --- RELATIONS ---
+// These relations are crucial for powerful queries and join operations.
+
+export const usersRelations = relations(users, ({ one, many }) => ({
+  // A user has one plan.
+  plan: one(plans, {
+    fields: [users.planId],
+    references: [plans.id],
+  }),
+  // A user can have many sessions, payments, etc.
   sessions: many(sessions),
-  campaigns: many(campaigns),
-  media: many(media),
-  reports: many(reports),
   payments: many(payments),
+  servers: many(servers),
+  campaigns: many(campaigns),
+  mediaUploads: many(mediaUploads),
+}));
+
+export const plansRelations = relations(plans, ({ many }) => ({
+  users: many(users),
 }));
 
 export const sessionsRelations = relations(sessions, ({ one, many }) => ({
@@ -93,7 +153,25 @@ export const sessionsRelations = relations(sessions, ({ one, many }) => ({
     fields: [sessions.userId],
     references: [users.id],
   }),
-  campaigns: many(campaigns),
+  messageLogs: many(messageLogs),
+}));
+
+export const paymentsRelations = relations(payments, ({ one }) => ({
+  user: one(users, {
+    fields: [payments.userId],
+    references: [users.id],
+  }),
+  plan: one(plans, {
+    fields: [payments.planId],
+    references: [plans.id],
+  }),
+}));
+
+export const serversRelations = relations(servers, ({ one }) => ({
+  user: one(users, {
+    fields: [servers.userId],
+    references: [users.id],
+  }),
 }));
 
 export const campaignsRelations = relations(campaigns, ({ one, many }) => ({
@@ -101,34 +179,23 @@ export const campaignsRelations = relations(campaigns, ({ one, many }) => ({
     fields: [campaigns.userId],
     references: [users.id],
   }),
-  session: one(sessions, {
-    fields: [campaigns.sessionId],
-    references: [sessions.id],
-  }),
-  reports: many(reports),
+  messageLogs: many(messageLogs),
 }));
 
-export const mediaRelations = relations(media, ({ one }) => ({
-  user: one(users, {
-    fields: [media.userId],
-    references: [users.id],
-  }),
-}));
-
-export const reportsRelations = relations(reports, ({ one }) => ({
-  user: one(users, {
-    fields: [reports.userId],
-    references: [users.id],
-  }),
+export const messageLogsRelations = relations(messageLogs, ({ one }) => ({
   campaign: one(campaigns, {
-    fields: [reports.campaignId],
+    fields: [messageLogs.campaignId],
     references: [campaigns.id],
   }),
+  session: one(sessions, {
+    fields: [messageLogs.sessionId],
+    references: [sessions.id],
+  }),
 }));
 
-export const paymentsRelations = relations(payments, ({ one }) => ({
+export const mediaUploadsRelations = relations(mediaUploads, ({ one }) => ({
   user: one(users, {
-    fields: [payments.userId],
+    fields: [mediaUploads.userId],
     references: [users.id],
   }),
 }));

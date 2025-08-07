@@ -12,12 +12,14 @@
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "^0.8.19",
 		"@cloudflare/workers-types": "^4.20250806.0",
+		"dotenv": "^17.2.1",
 		"drizzle-kit": "^0.31.4",
 		"typescript": "^5.5.2",
 		"vitest": "~3.2.0",
 		"wrangler": "^4.28.0"
 	},
 	"dependencies": {
-		"drizzle-orm": "^0.44.4"
+		"drizzle-orm": "^0.44.4",
+		"sqlite3": "^5.1.7"
 	}
 }
