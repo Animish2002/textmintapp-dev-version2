@@ -6,7 +6,7 @@ import { getAllUsers, getUserById, updateUser, deleteUser } from '../controllers
 const router = new Hono();
 
 
-router.get('/', authMiddleware(['user']), getAllUsers);
+router.get('/', authMiddleware(['admin']), getAllUsers);
 router.get('/:id', authMiddleware(), getUserById);
 router.put('/:id', authMiddleware(), updateUser);
 router.delete('/:id', authMiddleware(), deleteUser);
