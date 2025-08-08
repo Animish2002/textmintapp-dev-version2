@@ -16,17 +16,19 @@ export const register = async (c: Context) => {
   const d1 = c.env.DB as D1Database;
   const db = drizzle(d1, { schema });
 
-  const { name, email, role, personalAccessToken, password } = await c.req.json();
+  const { name, email, role, personalAccessToken, mobile, password } = await c.req.json();
 
+  // Basic required fields check
   if (!email || !password) {
     return c.json({ error: 'Email and password are required' }, 400);
   }
+  if (!personalAccessToken) {
+    return c.json({ error: 'Personal access token is required' }, 400);
+  }
 
   try {
-    // Check for the existence of the 'free' plan.
+    // Ensure the 'free' plan exists
     let freePlan = await db.select().from(plans).where(eq(plans.id, 'free')).get();
-
-    // If the 'free' plan doesn't exist, insert it.
     if (!freePlan) {
       await db.insert(plans).values({
         id: 'free',
@@ -38,30 +40,45 @@ export const register = async (c: Context) => {
       freePlan = await db.select().from(plans).where(eq(plans.id, 'free')).get();
     }
 
+    // Check if email already exists
     const existingUser = await db.select().from(users).where(eq(users.email, email)).get();
     if (existingUser) {
       return c.json({ error: 'User with this email already exists' }, 409);
     }
 
+    // Check if personal access token already exists
+    const existingToken = await db
+      .select()
+      .from(users)
+      .where(eq(users.personalAccessToken, personalAccessToken))
+      .get();
+
+    if (existingToken) {
+      return c.json({ error: 'Personal access token already exists' }, 409);
+    }
+
+    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Create new user
     const newUserId = crypto.randomUUID();
- 
 
     await db.insert(users).values({
       id: newUserId,
       email,
       name,
+      mobile,
       password: hashedPassword,
       personalAccessToken,
-      planId: freePlan?.id, // Use the ID from the fetched/created plan
-      accountExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      planId: freePlan?.id,
+      accountExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days expiry
       isActive: true,
       createdAt: new Date(),
       role: role || 'user'
     }).run();
-    
+
     return c.json({ message: 'User registered successfully' }, 201);
+
   } catch (error) {
     console.error('Registration error:', error);
     return c.json({ error: 'An unexpected error occurred' }, 500);
