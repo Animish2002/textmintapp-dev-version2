@@ -16,6 +16,7 @@ export const users = sqliteTable('users', {
   email: text('email').notNull().unique(),
   name: text('name'),
   password: text('password').notNull(),
+   mobile: text('mobile'), 
   planId: text('plan_id').references(() => plans.id, { onDelete: 'set null' }),
   role: text('role').default('user').notNull(),
   personalAccessToken: text('personal_access_token').notNull().unique(),

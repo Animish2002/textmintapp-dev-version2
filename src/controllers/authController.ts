@@ -58,7 +58,7 @@ export const register = async (c: Context) => {
       accountExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       isActive: true,
       createdAt: new Date(),
-      role
+      role: role || 'user'
     }).run();
     
     return c.json({ message: 'User registered successfully' }, 201);
