@@ -16,7 +16,7 @@ export const register = async (c: Context) => {
   const d1 = c.env.DB as D1Database;
   const db = drizzle(d1, { schema });
 
-  const { name, email, password } = await c.req.json();
+  const { name, email, role, personalAccessToken, password } = await c.req.json();
 
   if (!email || !password) {
     return c.json({ error: 'Email and password are required' }, 400);
@@ -46,17 +46,19 @@ export const register = async (c: Context) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const newUserId = crypto.randomUUID();
-    const newPersonalAccessToken = crypto.randomUUID().replace(/-/g, '');
+ 
 
     await db.insert(users).values({
       id: newUserId,
       email,
       name,
       password: hashedPassword,
-      personalAccessToken: newPersonalAccessToken,
+      personalAccessToken,
       planId: freePlan?.id, // Use the ID from the fetched/created plan
       accountExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       isActive: true,
+      createdAt: new Date(),
+      role
     }).run();
     
     return c.json({ message: 'User registered successfully' }, 201);
