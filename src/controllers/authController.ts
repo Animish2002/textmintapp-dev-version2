@@ -54,7 +54,7 @@ export const register = async (c: Context) => {
       name,
       password: hashedPassword,
       personalAccessToken: newPersonalAccessToken,
-      planId: freePlan.id, // Use the ID from the fetched/created plan
+      planId: freePlan?.id, // Use the ID from the fetched/created plan
       accountExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       isActive: true,
     }).run();
