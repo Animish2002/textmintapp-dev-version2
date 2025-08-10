@@ -6,6 +6,7 @@ import { trimTrailingSlash } from 'hono/trailing-slash';
 import authRoutes from './routes/auth.routes';
 import plansRoutes from "./routes/plan.routes";
 import userRoutes from "./routes/users.routes";
+import mediaRoutes from './routes/media.routes';
 
 const app = new Hono();
 
@@ -23,6 +24,7 @@ app.use('*', cors({
 app.route('/api/auth', authRoutes);
 app.route('/api/plans', plansRoutes);
 app.route('/api/users', userRoutes);
+app.route('/api/media', mediaRoutes);
 
 // Health check
 app.get('/', (c) => {

@@ -8,12 +8,35 @@ import bcrypt from 'bcryptjs';
 import { sign } from 'hono/jwt';
 
 
+const createUserFolderStructure = async (r2: R2Bucket, userId: string, userName: string): Promise<void> => {
+  const sanitizedUserName = userName?.replace(/[^a-zA-Z0-9-_]/g, '_') || 'user';
+  const folders = ['images', 'videos', 'documents'];
+  
+  try {
+    for (const folder of folders) {
+      const folderPath = `${sanitizedUserName}_${userId}/${folder}/`;
+      // Create a placeholder file to ensure folder exists
+      await r2.put(`${folderPath}.folder`, new ArrayBuffer(0), {
+        httpMetadata: {
+          contentType: 'application/octet-stream',
+        },
+      });
+    }
+    console.log(`Created folder structure for user: ${sanitizedUserName}_${userId}`);
+  } catch (error) {
+    console.error('Error creating user folder structure:', error);
+    // Don't fail registration if folder creation fails
+  }
+};
+
 /**
  * Handles user registration.
  * Creates a new user in the database after hashing their password.
+ * Also creates user folder structure in R2 storage.
  */
 export const register = async (c: Context) => {
   const d1 = c.env.DB as D1Database;
+  const r2 = c.env.R2_BUCKET as R2Bucket;
   const db = drizzle(d1, { schema });
 
   const { name, email, role, personalAccessToken, mobile, password } = await c.req.json();
@@ -77,14 +100,21 @@ export const register = async (c: Context) => {
       role: role || 'user'
     }).run();
 
-    return c.json({ message: 'User registered successfully' }, 201);
+    // Create user folder structure in R2 storage
+    if (r2) {
+      await createUserFolderStructure(r2, newUserId, name);
+    }
+
+    return c.json({ 
+      message: 'User registered successfully',
+      userId: newUserId 
+    }, 201);
 
   } catch (error) {
     console.error('Registration error:', error);
     return c.json({ error: 'An unexpected error occurred' }, 500);
   }
 };
-
 /**
  * Handles user login.
  * Verifies credentials and returns a JWT on success.

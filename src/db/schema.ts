@@ -10,7 +10,7 @@ import {
   relations,
 } from 'drizzle-orm';
 
-// --- USERS TABLE ---
+// --- USERS TABLE --- 
 export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
   email: text('email').notNull().unique(),
@@ -23,6 +23,7 @@ export const users = sqliteTable('users', {
   accountExpiresAt: integer('account_expires_at', { mode: 'timestamp' }).notNull(),
   isActive: integer('is_active', { mode: 'boolean' }).default(true),
   createdAt: integer('created_at', { mode: 'timestamp' }).defaultNow(),
+  wasenderUserId: text('wasender_user_id').unique(),
 }, (table) => ({
   roleConstraint: sql`CHECK(${table.role} IN ('admin', 'user'))`,
 }));
@@ -42,11 +43,23 @@ export const sessions = sqliteTable('sessions', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   phoneNumber: text('phone_number').notNull(),
-  status: text('status').default('active').notNull(),
+  status: text('status').default('disconnected').notNull(),
   sessionName: text('session_name'),
   createdAt: integer('created_at', { mode: 'timestamp' }).defaultNow(),
+  // Add Wasender-specific fields
+  wasenderSessionId: text('wasender_session_id').unique(), // Wasender's session ID
+  wasenderApiKey: text('wasender_api_key'), // Session-specific API key from Wasender
+  qrCode: text('qr_code'), // Store QR code data/URL
+  lastActiveAt: integer('last_active_at', { mode: 'timestamp' }),
+  // Session configuration
+  accountProtection: integer('account_protection', { mode: 'boolean' }).default(true),
+  logMessages: integer('log_messages', { mode: 'boolean' }).default(true),
+  readIncomingMessages: integer('read_incoming_messages', { mode: 'boolean' }).default(false),
+  webhookEnabled: integer('webhook_enabled', { mode: 'boolean' }).default(false),
+  webhookUrl: text('webhook_url'),
+  webhookSecret: text('webhook_secret'),
 }, (table) => ({
-  statusConstraint: sql`CHECK(${table.status} IN ('active', 'disconnected', 'expired'))`,
+  statusConstraint: sql`CHECK(${table.status} IN ('connected', 'disconnected', 'connecting', 'expired'))`,
 }));
 
 // --- PAYMENTS TABLE ---

@@ -8,3 +8,7 @@ binding = "DB" # This is the name you'll use to reference D1 in your Worker code
 database_name = "textmint-app-db"
 database_id = "bb78c3a6-2429-43a0-8bc0-72090170a222" # Replace with your actual D1 Database ID
 migrations_dir = "drizzle" # Directory where Drizzle migrations will be stored
+
+[[r2_buckets]]
+binding = "R2_BUCKET"
+bucket_name = "wasender"
