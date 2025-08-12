@@ -17,7 +17,16 @@
             "database_id": "bb78c3a6-2429-43a0-8bc0-72090170a222",
             "migrations_dir": "drizzle"
         }
+		
     ],
+	"r2_buckets": [
+		{
+			"binding": "R2_BUCKET",
+			"bucket_name": "textmint",
+			"preview_bucket_name": "testing"
+		}
+	]
+	
 
 
 		
