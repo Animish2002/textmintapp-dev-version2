@@ -36,6 +36,7 @@ app.get('/', (c) => {
   });
 });
 
+
 // Error handler
 app.onError((err, c) => {
   console.error('Application error:', err);
