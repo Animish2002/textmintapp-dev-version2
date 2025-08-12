@@ -7,6 +7,7 @@ import authRoutes from './routes/auth.routes';
 import plansRoutes from "./routes/plan.routes";
 import userRoutes from "./routes/users.routes";
 import mediaRoutes from './routes/media.routes';
+import whatsappRoutes from './routes/whatsappRoutes';
 
 const app = new Hono();
 
@@ -25,6 +26,7 @@ app.route('/api/auth', authRoutes);
 app.route('/api/plans', plansRoutes);
 app.route('/api/users', userRoutes);
 app.route('/api/media', mediaRoutes);
+app.route('/api/whatsapp', whatsappRoutes);
 
 // Health check
 app.get('/', (c) => {

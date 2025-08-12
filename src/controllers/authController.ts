@@ -193,24 +193,6 @@ export const login = async (c: Context) => {
     return c.json({ error: 'An unexpected error occurred' }, 500);
   }
 };
-
-
-export const testR2 =async(c:Context) =>{
-    try {
-    // Debug output
-    console.log('R2 Binding Type:', typeof c.env.R2_BUCKET);
-    console.log('R2 Methods:', Object.keys(c.env.R2_BUCKET || {}));
-    
-    // Simple test operation
-    await c.env.R2_BUCKET.put('test.txt', new TextEncoder().encode('test content'));
-    
-    return c.text('R2 access works!');
-  } catch (e) {
-    console.error('R2 Error:', e);
-    return c.text(`R2 error: ${e.message}`, 500);
-  }
-};
-
 /**
  * A protected route handler to demonstrate middleware functionality.
  */
