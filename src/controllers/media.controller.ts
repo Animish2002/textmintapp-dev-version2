@@ -1,4 +1,3 @@
-
 // src/controllers/media.controller.ts
 import { Context } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
@@ -76,16 +75,18 @@ export const uploadMedia = async (c: Context) => {
   const db = drizzle(d1, { schema });
 
   try {
-    // Get user from token (assuming JWT middleware sets user info)
-    const userId = c.get('userId'); // This should be set by your auth middleware
-    if (!userId) {
-      return c.json({ error: 'Unauthorized' }, 401);
+    // Get user from auth middleware - the middleware sets 'user' with the decoded JWT payload
+    const user = c.get('user');
+    if (!user || !user.id) {
+      return c.json({ error: 'User information not found' }, 401);
     }
 
-    // Get user details
-    const user = await db.select().from(users).where(eq(users.id, userId)).get();
-    if (!user) {
-      return c.json({ error: 'User not found' }, 404);
+    const userId = user.id;
+
+    // Get user details from database (optional - you might already have what you need from JWT)
+    const userDetails = await db.select().from(users).where(eq(users.id, userId)).get();
+    if (!userDetails) {
+      return c.json({ error: 'User not found in database' }, 404);
     }
 
     // Parse form data
@@ -114,7 +115,7 @@ export const uploadMedia = async (c: Context) => {
     }
 
     // Generate file path
-    const sanitizedUserName = user.name?.replace(/[^a-zA-Z0-9-_]/g, '_') || 'user';
+    const sanitizedUserName = userDetails.name?.replace(/[^a-zA-Z0-9-_]/g, '_') || 'user';
     const fileName = generateFileName(file.name, userId);
     const filePath = `${sanitizedUserName}_${userId}/${config.folder}/${fileName}`;
 
@@ -128,9 +129,11 @@ export const uploadMedia = async (c: Context) => {
         contentType: file.type,
       },
     });
+    
+console.log(c.env.R2_URL);
 
     // Generate public URL (adjust based on your R2 configuration)
-    const publicUrl = `https://your-r2-domain.com/${filePath}`;
+    const publicUrl = c.env.R2_URL+`/${filePath}`;
 
     // Save to database
     const mediaId = crypto.randomUUID();
@@ -171,10 +174,13 @@ export const getUserMedia = async (c: Context) => {
   const db = drizzle(d1, { schema });
 
   try {
-    const userId = c.get('userId');
-    if (!userId) {
-      return c.json({ error: 'Unauthorized' }, 401);
+    // Get user from auth middleware
+    const user = c.get('user');
+    if (!user || !user.id) {
+      return c.json({ error: 'User information not found' }, 401);
     }
+
+    const userId = user.id;
 
     // Get query parameters
     const page = parseInt(c.req.query('page') || '1');
@@ -188,10 +194,11 @@ export const getUserMedia = async (c: Context) => {
     if (fileType) {
       const category = getFileCategory(fileType);
       if (category) {
-        const config = FILE_CONFIGS[category as keyof typeof FILE_CONFIGS];
+        // You might want to add a category column to your mediaUploads table
+        // For now, we'll filter by fileType directly
         whereCondition = and(
           whereCondition,
-          // This is a simplified filter - you might want to store category in DB
+          eq(mediaUploads.fileType, fileType)
         );
       }
     }
@@ -207,11 +214,13 @@ export const getUserMedia = async (c: Context) => {
       .all();
 
     // Get total count for pagination
-    const totalCount = await db
+    const totalResult = await db
       .select({ count: mediaUploads.id })
       .from(mediaUploads)
       .where(whereCondition)
       .all();
+
+    const totalCount = totalResult.length;
 
     return c.json({
       success: true,
@@ -219,8 +228,8 @@ export const getUserMedia = async (c: Context) => {
       pagination: {
         page,
         limit,
-        total: totalCount.length,
-        totalPages: Math.ceil(totalCount.length / limit),
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / limit),
       }
     });
 
@@ -239,12 +248,14 @@ export const deleteMedia = async (c: Context) => {
   const db = drizzle(d1, { schema });
 
   try {
-    const userId = c.get('userId');
-    const mediaId = c.req.param('id');
-
-    if (!userId) {
-      return c.json({ error: 'Unauthorized' }, 401);
+    // Get user from auth middleware
+    const user = c.get('user');
+    if (!user || !user.id) {
+      return c.json({ error: 'User information not found' }, 401);
     }
+
+    const userId = user.id;
+    const mediaId = c.req.param('id');
 
     // Find the media record
     const media = await db
